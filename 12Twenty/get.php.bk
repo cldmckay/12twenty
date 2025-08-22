@@ -1,0 +1,31 @@
+<?php
+	echo 'get';
+	require_once('/ip/pagriet/lib/iet/CURLClient.php');
+	$client = new CURLClient;
+
+	$key = array(
+		'key' => 'MP9U~!xDW^%268*y[3',
+	);
+	$getTokenUrl = "https://indiana.admin.sandbox-12twenty.com/api/client/generateAuthenticationToken?";
+	//$url = "https://indiana.admin.sandbox-12twenty.com/api/v2/students";
+
+	$token = $client->get($getTokenUrl, $key);
+	var_dump($token);
+
+	$testData = array(
+		"First Name"=>"Haihan",
+		"Last Name"=>"Guo",
+	);
+	$authorization = "Authorization: Bearer ".$token;
+	$params = array(
+		'year' => '2018',
+	);
+	$header = array('Content-Type: application/json', $authorization);
+	//$url = "https://indiana.admin.sandbox-12twenty.com/api/v2/students";
+	//$result = $client->get($url, $params, $header);
+	
+	$url = "https://indiana.admin.sandbox-12twenty.com/api/v2/students";
+	$result = $client->post($url, $testData, $header);
+
+	var_dump($result);
+?>

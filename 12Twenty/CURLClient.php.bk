@@ -1,0 +1,47 @@
+<?php
+class CURLClient {
+
+	function __construct($debug=false) {
+		$this->debug=$debug;
+	}
+
+	function get($url, $params=null, $header=null) { return $this->fetch($url, $params, $header, 'GET'); }
+	function post($url, $params=null, $header=null) { return $this->fetch($url, $params, $header, 'POST'); }
+	function put($url, $params=null, $header=null) { return $this->fetch($url, $params, $header, 'PUT'); }
+	
+	function fetch($url, $params=null, $header=null, $method) {
+	    $ch = curl_init();
+	
+		if($header) curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+	    if($method == 'POST') {
+			curl_setopt($ch, CURLOPT_POST, 1);
+			curl_setopt($ch, CURLOPT_POSTFIELDS, $params);
+			curl_setopt($ch, CURLOPT_URL, $url);
+	    }
+	    elseif($method == 'GET') {
+			if($params) foreach($params as $k=>$v) $args[] = "$k=$v";
+			if(isset($args)) $url .= implode('&', $args);
+			curl_setopt($ch, CURLOPT_URL, $url);
+	    }elseif($method == 'PUT'){
+			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+			curl_setopt($ch, CURLOPT_POSTFIELDS, $params);
+			curl_setopt($ch, CURLOPT_URL, $url);
+		}
+	    if($this->debug) $this->dump($url, $params, $header);
+
+	    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+	    $response = curl_exec($ch);
+	
+	    curl_close($ch);
+	    return $response;
+	}
+
+	function dump () {
+		$args = func_get_args();
+		foreach($args as $arg)
+		echo '<pre>' . print_r($arg, true) . '</pre>';
+	}
+
+	function putError() { die($this->dump($_GET)); }
+}
+?>
