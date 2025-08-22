@@ -1,121 +1,127 @@
 <?php
 
-require 'vendor/autoload.php';
+/**
+ * Minimal XLSX reader using built‑in PHP extensions only.
+ * Reads the first worksheet and returns data as a two‑dimensional array.
+ */
+function readXlsx(string $filename): array {
+    $zip = new ZipArchive();
+    if ($zip->open($filename) !== true) {
+        return [];
+    }
 
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+    $sharedStrings = [];
+    if (($idx = $zip->locateName('xl/sharedStrings.xml')) !== false) {
+        $xml = simplexml_load_string($zip->getFromIndex($idx));
+        foreach ($xml->si as $si) {
+            $sharedStrings[] = (string) $si->t;
+        }
+    }
 
+    $sheet = [];
+    if (($idx = $zip->locateName('xl/worksheets/sheet1.xml')) !== false) {
+        $xml = simplexml_load_string($zip->getFromIndex($idx));
+        foreach ($xml->sheetData->row as $row) {
+            $rowData = [];
+            foreach ($row->c as $c) {
+                $value = (string) $c->v;
+                if ((string) $c['t'] === 's') {
+                    $value = $sharedStrings[(int) $value] ?? '';
+                }
+                $col = preg_replace('/\d+/', '', (string) $c['r']);
+                $rowData[columnIndexFromString($col)] = $value;
+            }
+            ksort($rowData);
+            $sheet[] = array_values($rowData);
+        }
+    }
 
-function GetMajorTable(){
-	//echo '<br /><br /><br />get major table<br /><br /><br />';
-	$inputFileType = 'Xlsx';
-	$inputFileName = '/groups/iuieapi/bin/iuie_majors.xlsx';
-
-	$reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
-
-	$worksheetData = $reader->listWorksheetInfo($inputFileName);
-
-	$reader->setReadDataOnly(true);
-	/**  Load $inputFileName to a Spreadsheet Object  **/
-	$spreadsheet = $reader->load($inputFileName);
-	$worksheet = $spreadsheet->getActiveSheet();
-
-	$data = array();
-	$row_names = array();
-	$row_num = 1;
-	foreach ($worksheet->getRowIterator() AS $row) {
-		//echo '$row_num'.$row_num;
-		if($row_num == 1){
-			$cellIterator = $row->getCellIterator();
-			$cellIterator->setIterateOnlyExistingCells(FALSE); // This loops through all cells,
-			$column = 1;
-			foreach ($cellIterator as $cell) {
-				$row_names[$column] = $cell->getValue();
-				$data[$row_names[$column]] = array();
-				$column++;
-			}
-		}else{
-			$cellIterator = $row->getCellIterator();
-			$cellIterator->setIterateOnlyExistingCells(FALSE); // This loops through all cells,
-			$cells = [];
-			$column = 1;
-			foreach ($cellIterator as $cell) {
-				//echo '<br />'.$row_names[$column].' --> '.$cell->getValue().'<br />';
-				array_push($data[$row_names[$column]], $cell->getValue());
-				$column++;
-			}		
-		}
-		$row_num++;
-	}
-	$major_list = [];
-	for($i = 0; $i < Count($data['Program']); $i++){
-		//var_dump($data['Program'][i]);
-		$major_list[] = new MajorItem($data['Career'][$i],$data['Program'][$i],$data['Program Description'][$i],$data['Major Code'][$i],$data['Major Description'][$i],$data['Division'][$i], $data['Degree Level'][$i], $data['Degree'][$i]);
-	}
-	//var_dump($major_list);
-	return $major_list;
+    $zip->close();
+    return $sheet;
 }
 
-function GetGraduationTermTable(){
-	//echo '<br /><br /><br />get major table<br /><br /><br />';
-	$inputFileType = 'Xlsx';
-	$inputFileName = '/groups/iuieapi/bin/12Twenty/Graduation_Term_Table.xlsx';
+function columnIndexFromString(string $letters): int {
+    $letters = strtoupper($letters);
+    $col = 0;
+    for ($i = 0; $i < strlen($letters); $i++) {
+        $col = $col * 26 + (ord($letters[$i]) - 64);
+    }
+    return $col - 1; // zero based
+}
 
-	$reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReader($inputFileType);
+function GetMajorTable(): array {
+    $rows = readXlsx('/groups/iuieapi/bin/iuie_majors.xlsx');
+    if (empty($rows)) {
+        return [];
+    }
 
-	$worksheetData = $reader->listWorksheetInfo($inputFileName);
+    $headers = array_shift($rows);
+    $data = [];
+    foreach ($headers as $h) {
+        $data[$h] = [];
+    }
+    foreach ($rows as $row) {
+        foreach ($headers as $i => $h) {
+            $data[$h][] = $row[$i] ?? null;
+        }
+    }
 
-	$reader->setReadDataOnly(true);
-	/**  Load $inputFileName to a Spreadsheet Object  **/
-	$spreadsheet = $reader->load($inputFileName);
-	$worksheet = $spreadsheet->getActiveSheet();
+    $major_list = [];
+    $count = count($data['Program'] ?? []);
+    for ($i = 0; $i < $count; $i++) {
+        $major_list[] = new MajorItem(
+            $data['Career'][$i] ?? null,
+            $data['Program'][$i] ?? null,
+            $data['Program Description'][$i] ?? null,
+            $data['Major Code'][$i] ?? null,
+            $data['Major Description'][$i] ?? null,
+            $data['Division'][$i] ?? null,
+            $data['Degree Level'][$i] ?? null,
+            $data['Degree'][$i] ?? null
+        );
+    }
+    return $major_list;
+}
 
-	$data = array();
-	$row_names = array();
-	$row_num = 1;
-	foreach ($worksheet->getRowIterator() AS $row) {
-		//echo '$row_num'.$row_num;
-		if($row_num == 1){
-			$cellIterator = $row->getCellIterator();
-			$cellIterator->setIterateOnlyExistingCells(FALSE); // This loops through all cells,
-			$column = 1;
-			foreach ($cellIterator as $cell) {
-				$row_names[$column] = $cell->getValue();
-				$data[$row_names[$column]] = array();
-				$column++;
-			}
-		}else{
-			$cellIterator = $row->getCellIterator();
-			$cellIterator->setIterateOnlyExistingCells(FALSE); // This loops through all cells,
-			$cells = [];
-			$column = 1;
-			foreach ($cellIterator as $cell) {
-				//echo '<br />'.$row_names[$column].' --> '.$cell->getValue().'<br />';
-				array_push($data[$row_names[$column]], $cell->getValue());
-				$column++;
-			}		
-		}
-		$row_num++;
-	}
-	$term_list = [];
-	for($i = 0; $i < Count($data['Admit Term']); $i++){
-		//var_dump($data['Program'][i]);
-		$term_list[] = new TermItem($data['Admit Term'][$i],$data['Graduation Term'][$i],$data['Graduation Year'][$i]);
-	}
-	//var_dump($term_list);
-	return $term_list;
+function GetGraduationTermTable(): array {
+    $rows = readXlsx('/groups/iuieapi/bin/12Twenty/Graduation_Term_Table.xlsx');
+    if (empty($rows)) {
+        return [];
+    }
+
+    $headers = array_shift($rows);
+    $data = [];
+    foreach ($headers as $h) {
+        $data[$h] = [];
+    }
+    foreach ($rows as $row) {
+        foreach ($headers as $i => $h) {
+            $data[$h][] = $row[$i] ?? null;
+        }
+    }
+
+    $term_list = [];
+    $count = count($data['Admit Term'] ?? []);
+    for ($i = 0; $i < $count; $i++) {
+        $term_list[] = new TermItem(
+            $data['Admit Term'][$i] ?? null,
+            $data['Graduation Term'][$i] ?? null,
+            $data['Graduation Year'][$i] ?? null
+        );
+    }
+    return $term_list;
 }
 
 class TermItem {
-	public ?string $admitTerm;
+    public ?string $admitTerm;
     public ?string $graduationTerm;
     public ?string $graduationYear;
-	public function __construct($admitTerm, $graduationTerm, $graduationYear) {
-		//$UNIX_DATE = ($beginDate - 25569) * 86400;		
-		$this->admitTerm = $admitTerm;
-		$this->graduationTerm = $graduationTerm;
-		$this->graduationYear = $graduationYear;
-	}
+
+    public function __construct($admitTerm, $graduationTerm, $graduationYear) {
+        $this->admitTerm = $admitTerm;
+        $this->graduationTerm = $graduationTerm;
+        $this->graduationYear = $graduationYear;
+    }
 }
 
 class MajorItem {
@@ -127,18 +133,18 @@ class MajorItem {
     public ?string $division;
     public ?string $degree_level;
     public ?string $degree;
-	public function __construct($career, $program, $programdesc, $majorcode, $majordesc, $division, $degree_level,  $degree) {
-		$this->career = $career;
-		$this->program = $program;
-		$this->program_description = $programdesc;
-		$this->major_code = $majorcode;
-		$this->major_description = $majordesc;
-		$this->division = $division;
-		$this->degree_level = $degree_level;
-		$this->degree = $degree;
-	}
+
+    public function __construct($career, $program, $programdesc, $majorcode, $majordesc, $division, $degree_level, $degree) {
+        $this->career = $career;
+        $this->program = $program;
+        $this->program_description = $programdesc;
+        $this->major_code = $majorcode;
+        $this->major_description = $majordesc;
+        $this->division = $division;
+        $this->degree_level = $degree_level;
+        $this->degree = $degree;
+    }
 }
 
-
-
 ?>
+
